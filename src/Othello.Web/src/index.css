@@ -385,6 +385,7 @@ body {
 }
 
 .status-main {
+  text-wrap: balance;
   font-size: 1.3rem;
   font-weight: 650;
   line-height: 1.3;
