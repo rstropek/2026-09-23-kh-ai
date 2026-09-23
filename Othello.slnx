@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Othello.Api/Othello.Api.csproj" />
+    <Project Path="src/Othello.Core/Othello.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Othello.Api.Tests/Othello.Api.Tests.csproj" />
+    <Project Path="tests/Othello.Core.Tests/Othello.Core.Tests.csproj" />
+  </Folder>
+</Solution>

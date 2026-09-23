@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Othello.Core\Othello.Core.csproj" />
+  </ItemGroup>
+
+</Project>
