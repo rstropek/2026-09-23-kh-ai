@@ -1,0 +1,145 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Othello UI walkthrough",
+  "description": "How the React frontend is built: hosting, state management, components, styling and e2e tests.",
+  "isPrimary": true,
+  "steps": [
+    {
+      "directory": "src/Othello.Web",
+      "title": "Welcome",
+      "description": "## How the Othello UI is built\n\nThis tour follows the path of a move through the frontend, one layer at a time:\n\n1. **Hosting**: how the ASP.NET Core backend serves the single-page app\n2. **Entry point**: `index.html` → `main.tsx` → `App.tsx`\n3. **Data**: API types and the `fetch` wrapper\n4. **State**: the `useOthelloGame` hook (loading, moves, the computer's turn)\n5. **Components**: `Board`, `Scoreboard`, `StatusLine`, `NewGameForm`\n6. **Styling**: design tokens, the board frame and the 3D disc flip\n7. **Tests**: how the Playwright e2e tests use the markup\n\nThe frontend never implements Othello rules. The server sends the board, the valid moves and the history, and the UI renders them."
+    },
+    {
+      "file": "src/Othello.Web/vite.config.ts",
+      "line": 9,
+      "title": "Build output goes into the backend",
+      "description": "`vite build` writes the production bundle straight into `src/Othello.Api/wwwroot`, so the backend can serve it as static files. The folder is git-ignored.\n\nIn development, `npm run dev` runs Vite with hot reload and **proxies `/api`** to the backend on port 5240 (line 13). The frontend code always uses relative URLs like `/api/games`, so the same code works in both setups."
+    },
+    {
+      "file": "src/Othello.Api/Program.cs",
+      "line": 23,
+      "title": "The backend serves the SPA",
+      "description": "`UseDefaultFiles` + `UseStaticFiles` serve `wwwroot/index.html` and the hashed JS/CSS assets.\n\nFurther down:\n- line 30: unknown `/api/...` routes return **404**, so a mistyped API call doesn't get the HTML page back\n- line 31: `MapFallbackToFile(\"index.html\")` sends any other URL to the SPA\n\nOn line 15, enums are serialized as camelCase strings (`\"black\"`, `\"inProgress\"`). That's why the TypeScript types in `api.ts` are string unions."
+    },
+    {
+      "file": "src/Othello.Web/index.html",
+      "line": 11,
+      "title": "HTML shell",
+      "description": "The whole page is just an empty `#root` div plus the module script. Vite rewrites `/src/main.tsx` to the bundled, hashed file at build time."
+    },
+    {
+      "file": "src/Othello.Web/src/main.tsx",
+      "line": 1,
+      "title": "Entry point",
+      "description": "- Loads the self-hosted **Bricolage Grotesque** variable font (`standard.css` includes the weight *and* width axes; the headline uses `font-stretch`)\n- Loads the global stylesheet `index.css` (the only stylesheet)\n- Mounts `<App />` inside `<StrictMode>`. In development, StrictMode runs effects twice, which is why the effects in `useOthelloGame` clean up after themselves."
+    },
+    {
+      "file": "src/Othello.Web/src/App.tsx",
+      "line": 7,
+      "title": "App: layout and wiring",
+      "description": "`App` is only a layout component. It gets everything from the `useOthelloGame` hook and passes it down as props:\n\n- `<Board>` on the left (a placeholder frame while the first game loads)\n- a side panel with `<Scoreboard>`, `<StatusLine>`, an error `role=\"alert\"` and `<NewGameForm>`\n\nThere is no router, context or global store. One hook owns the state, and components just render props."
+    },
+    {
+      "file": "src/Othello.Web/src/api.ts",
+      "line": 17,
+      "title": "The Game type: what the server sends",
+      "description": "`Game` mirrors the C# `GameDto` (`src/Othello.Api/Games/Contracts.cs`). Notable fields:\n\n- `board`: 8 strings of `.`/`B`/`W`, compact and easy to read in the network tab\n- `validMoves`: computed by the server, the UI only highlights them\n- `computerPlayer`: `null` in hot-seat mode\n- `history`: every turn including **passes** (`position: null`) and the flipped discs"
+    },
+    {
+      "file": "src/Othello.Web/src/api.ts",
+      "line": 45,
+      "title": "One fetch wrapper for all calls",
+      "description": "Every endpoint returns the full `Game`, so a single `request` helper is enough.\n\nOn errors the backend returns **ProblemDetails** (400 for an invalid move, 409 for a move out of turn). The helper turns the `detail`/`title` into an `ApiError`, and the hook shows its message.\n\nThe four exported functions below map one-to-one to the API endpoints."
+    },
+    {
+      "file": "src/Othello.Web/src/othello.ts",
+      "line": 11,
+      "title": "Small view helpers",
+      "description": "Pure functions that turn the `Game` DTO into what the components need:\n\n- `discAt`: reads a cell from the string rows\n- `toNotation`: `(2,3)` → `\"d3\"`, used for keys, labels and test ids\n- `isComputerTurn`: is the computer due to move? Used by both the hook and the board\n- `lastMove`: the last *placed* disc, skipping passes (line 27)"
+    },
+    {
+      "file": "src/Othello.Web/src/useOthelloGame.ts",
+      "line": 49,
+      "title": "useOthelloGame: all UI state in one hook",
+      "description": "Three pieces of state:\n\n- `game`: the latest server snapshot (the only source of truth)\n- `error`: a message for the alert\n- `busy`: true while a request is in flight. It disables the board so the same move can't be sent twice.\n\nThe hook returns `{ game, error, busy, newGame, play }` (last line)."
+    },
+    {
+      "file": "src/Othello.Web/src/useOthelloGame.ts",
+      "line": 54,
+      "title": "run(): every request follows the same steps",
+      "description": "Every action (new game, move, computer move, initial load) goes through `run`:\n\n1. `busy = true`, clear the error\n2. await the API call\n3. store the new `Game` and remember its id in `localStorage`\n4. on failure, set a readable error message\n5. `busy = false`\n\nThe UI never updates the board optimistically; it always renders the server's answer."
+    },
+    {
+      "file": "src/Othello.Web/src/useOthelloGame.ts",
+      "line": 80,
+      "title": "Resuming after a reload",
+      "description": "On mount, the hook tries to load the game whose id is stored in `localStorage`. If that fails (for example, the backend restarted and lost its in-memory games), it starts a new game with the defaults.\n\n`useEffectEvent` (stable since React 19.2) lets the effect call this logic without listing it as a dependency. The effect on line 95 runs only on mount."
+    },
+    {
+      "file": "src/Othello.Web/src/useOthelloGame.ts",
+      "line": 103,
+      "title": "The computer's turn is driven by an effect",
+      "description": "The server never moves for the computer on its own. After every state change, this effect checks whether it's the computer's turn. If so, it waits `COMPUTER_DELAY_MS` (700 ms) so you can see your own move land, then calls `POST /computer-move`.\n\n- The cleanup `clearTimeout` stops stale timers, for example when you start a new game during the pause.\n- The same effect also makes the computer open the game when you choose to play white.\n- If the computer's reply leaves you without a legal move, the server records your pass and it's the computer's turn again. The effect then fires once more, with no special code for passes."
+    },
+    {
+      "file": "src/Othello.Web/src/components/Board.tsx",
+      "line": 20,
+      "title": "Board: which cells can be played",
+      "description": "`Board` gets the game, a `disabled` flag (= `busy`) and an `onPlay` callback.\n\n`canPlay` combines three conditions: no request running, the game still in progress, and not the computer's turn. A cell is clickable only if `canPlay` *and* the server listed it in `validMoves`.\n\n`hintColor` makes the move hints the color of the player to move, which matters in hot-seat mode."
+    },
+    {
+      "file": "src/Othello.Web/src/components/Board.tsx",
+      "line": 37,
+      "title": "Board: 64 buttons in a CSS grid",
+      "description": "The board is a flat list of 64 cells in a CSS grid (8 × 8). Each cell is a real `<button>`, which gives keyboard focus, `disabled` and screen reader support for free. `aria-label` reads like \"d3, empty, playable\" or \"d4, white disc, last move\".\n\nThe `data-*` attributes (`data-disc`, `data-valid`, `data-last`, and `data-turns` on the board) aren't used for styling. They give the e2e tests a stable way to check state.\n\nThe cell `key` is its notation (`d3`), so React keeps the same DOM node for a square across renders. The flip animation depends on this (next steps)."
+    },
+    {
+      "file": "src/Othello.Web/src/components/Board.tsx",
+      "line": 63,
+      "title": "A disc has two faces",
+      "description": "Each disc is a small 3D card: a black face and a white face on top of each other. The `disc--black`/`disc--white` class only sets which way the card is turned.\n\nWhen a disc is flipped, React only changes the class on the **existing** element, and the CSS transition turns it over. There's no JS animation code.\n\nEmpty playable cells get a small `hint` dot. The last move gets a brass `last-marker`. The four `star` spans (line 76) are the dots from the classic Othello board."
+    },
+    {
+      "file": "src/Othello.Web/src/index.css",
+      "line": 234,
+      "title": "CSS: the disc flip",
+      "description": "- `.disc` uses `transform-style: preserve-3d` and a `transform` transition\n- `.disc--white` rotates the card 180° around the Y axis\n- both faces use `backface-visibility: hidden`, and the white face is pre-rotated 180°, so you always see the correct color\n\nPlacing a disc uses the `place` keyframes (line 269). They animate the separate `scale` property, not `transform`, so the drop-in and the flip can run together without conflicting."
+    },
+    {
+      "file": "src/Othello.Web/src/index.css",
+      "line": 1,
+      "title": "CSS: design tokens and sizing",
+      "description": "All colors are custom properties on `:root`: sage paper, baize green, dark frame, brass accent, and the disc colors. Dark mode (line 30) only redefines tokens.\n\n`--board-size: min(92vw, 70vh, 620px)` is the one size everything is derived from: frame padding, coordinate font size and star point size are all `calc()`s of it, so the board scales as a unit from phones to desktops.\n\n`prefers-reduced-motion` (end of file) sets the flip duration to 0 and turns off the drop-in."
+    },
+    {
+      "file": "src/Othello.Web/src/index.css",
+      "line": 116,
+      "title": "CSS: frame, coordinates and grid lines",
+      "description": "- `.board-frame` is the dark wooden frame; its padding (`--label-space`) holds the a–h / 1–8 labels, which are positioned absolutely\n- `.board` (line 160) is the 8×8 grid. The **grid lines are the `gap`** showing the darker background through, so no borders are needed\n- `.table` (line 97) puts the board and side panel side by side, and stacks them below 860 px"
+    },
+    {
+      "file": "src/Othello.Web/src/components/StatusLine.tsx",
+      "line": 48,
+      "title": "StatusLine: text generated from state",
+      "description": "All status copy is derived from the `Game`:\n\n- `turnText`: \"Your move…\", \"The computer is thinking…\" or \"Black to move.\" (hot seat)\n- `resultText`: \"You win 40 to 24.\" / \"The computer wins…\" / \"Draw…\"\n- `passText`: shown when the **last history entry is a pass**, for example \"The computer had no legal move, so the turn passes back.\"\n\n`aria-live=\"polite\"` makes screen readers announce each change."
+    },
+    {
+      "file": "src/Othello.Web/src/components/Scoreboard.tsx",
+      "line": 12,
+      "title": "Scoreboard",
+      "description": "Two score tiles (disc, count, name). The tile of the player to move gets a brass border via `data-active`. Names depend on the mode: *You/Computer* or *Black/White*.\n\nBelow them is a share bar: the black part's width is black's share of all discs, and its CSS transition moves together with the disc flips."
+    },
+    {
+      "file": "src/Othello.Web/src/components/NewGameForm.tsx",
+      "line": 10,
+      "title": "NewGameForm: local form state",
+      "description": "The only component with its own state: the chosen opponent and color. It's a plain `<form>` with radio groups in `<fieldset>`s. The color choice appears only for games against the computer.\n\nThe game only changes on submit: `onStart` → `newGame` in the hook → `POST /api/games`. Changing a radio button never affects the running game."
+    },
+    {
+      "file": "src/Othello.Web/e2e/game.spec.ts",
+      "line": 3,
+      "title": "How the e2e tests use the markup",
+      "description": "The Playwright tests run against the real ASP.NET Core host serving the production build (see `playwright.config.ts`). They use:\n\n- accessible roles and names (`region \"Othello board\"`, radio buttons, the *Start new game* button)\n- the `data-testid`/`data-*` attributes from `Board`\n\nFor example, `data-turns` changing means the server has answered, so the tests don't need sleeps even with the computer's 700 ms delay.\n\nRun them with `npm run test:e2e` in `src/Othello.Web`."
+    }
+  ]
+}
