@@ -34,6 +34,7 @@ export default function App() {
           <NewGameForm
             initial={DEFAULT_OPTIONS}
             disabled={busy && game === null && error === null}
+            confirm={game?.status === "inProgress" && game.history.length > 0}
             onStart={newGame}
           />
         </aside>

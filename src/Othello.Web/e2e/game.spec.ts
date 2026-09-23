@@ -3,6 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 const cell = (page: Page, notation: string) => page.getByTestId(`cell-${notation}`);
 const board = (page: Page) => page.getByRole("region", { name: "Othello board" });
 const status = (page: Page) => page.getByTestId("status");
+const confirmation = (page: Page) => page.getByRole("dialog", { name: "Abandon this game?" });
 
 async function startNewGame(
   page: Page,
@@ -61,6 +62,32 @@ test("computer opens when the player chooses white", async ({ page }) => {
   await expect(status(page)).toHaveText("Your move. Place a white disc on a marked square.");
 });
 
+test("asks before abandoning a game in progress and keeps it on cancel", async ({ page }) => {
+  await cell(page, "d3").click();
+  await expect(board(page)).toHaveAttribute("data-turns", "2");
+
+  await page.getByRole("button", { name: "Start new game" }).click();
+
+  await expect(confirmation(page)).toBeVisible();
+  await confirmation(page).getByRole("button", { name: "Keep playing" }).click();
+
+  await expect(confirmation(page)).toBeHidden();
+  await expect(board(page)).toHaveAttribute("data-turns", "2");
+  await expect(cell(page, "d3")).toHaveAttribute("data-disc", "black");
+});
+
+test("starts a new game after confirming", async ({ page }) => {
+  await cell(page, "d3").click();
+  await expect(board(page)).toHaveAttribute("data-turns", "2");
+
+  await startNewGame(page, "Friend on this screen");
+  await confirmation(page).getByRole("button", { name: "Start new game" }).click();
+
+  await expect(confirmation(page)).toBeHidden();
+  await expect(board(page)).toHaveAttribute("data-turns", "0");
+  await expect(status(page)).toHaveText("Black to move.");
+});
+
 test("resumes the current game after a reload", async ({ page }) => {
   await cell(page, "d3").click();
   await expect(board(page)).toHaveAttribute("data-turns", "2");
@@ -88,4 +115,9 @@ test("two players can play a full game on one screen", async ({ page }) => {
   const white = Number(await page.getByTestId("score-white").locator(".score-count").textContent());
   expect(black + white).toBeGreaterThan(4);
   expect(black + white).toBeLessThanOrEqual(64);
+
+  // A finished game can be replaced without confirmation.
+  await startNewGame(page, "Friend on this screen");
+  await expect(board(page)).toHaveAttribute("data-turns", "0");
+  await expect(confirmation(page)).toHaveCount(0);
 });
