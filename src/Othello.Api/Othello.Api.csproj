@@ -4,4 +4,9 @@
     <ProjectReference Include="..\Othello.Core\Othello.Core.csproj" />
   </ItemGroup>
 
+  <!-- wwwroot contains the build output of the React frontend (src/Othello.Web) and is not under source control -->
+  <Target Name="EnsureWebRoot" BeforeTargets="Build">
+    <MakeDir Directories="$(MSBuildProjectDirectory)/wwwroot" />
+  </Target>
+
 </Project>
